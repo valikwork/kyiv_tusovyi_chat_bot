@@ -92,6 +92,10 @@ class KyivTusovyiBot:
     def handle_message(self, message: dict) -> None:
         """Handle all messages from users"""
         try:
+            # Only respond to private (direct) messages
+            if message['chat'].get('type') != 'private':
+                return
+
             chat_id = str(message['chat']['id'])
             user_id = str(message['from']['id'])
             text = message.get('text', '').strip()
@@ -227,7 +231,7 @@ class KyivTusovyiBot:
                     help_text += """
 *Admin Commands:*
 • `/block <user_id>` - Block a user
-• `/unblock <user_id>` - Unblock a user  
+• `/unblock <user_id>` - Unblock a user
 • `/blocked` - List blocked users
                     """
 
