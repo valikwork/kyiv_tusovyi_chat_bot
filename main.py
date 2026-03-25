@@ -92,6 +92,10 @@ class KyivTusovyiBot:
     def handle_message(self, message: dict) -> None:
         """Handle all messages from users"""
         try:
+            # Only respond to private (direct) messages
+            if message['chat'].get('type') != 'private':
+                return
+
             chat_id = str(message['chat']['id'])
             user_id = str(message['from']['id'])
             text = message.get('text', '').strip()
@@ -317,6 +321,39 @@ class KyivTusovyiBot:
             print(f"❌ Error testing bot token: {e}")
             return False
 
+    def setup_commands(self) -> None:
+        """Set bot commands for private chats only and remove them from group chats"""
+        base_url = f"https://api.telegram.org/bot{self.token}"
+
+        # Set commands for private chats
+        private_commands = [
+            {"command": "post", "description": "Post a message to the group"},
+            {"command": "status", "description": "Check your status"},
+            {"command": "help", "description": "Show help"},
+            {"command": "cancel", "description": "Cancel waiting for post"},
+        ]
+
+        try:
+            # Set commands visible only in private chats
+            requests.post(f"{base_url}/setMyCommands", json={
+                "commands": private_commands,
+                "scope": {"type": "all_private_chats"}
+            }, timeout=10)
+
+            # Remove commands from group chats
+            requests.post(f"{base_url}/deleteMyCommands", json={
+                "scope": {"type": "all_group_chats"}
+            }, timeout=10)
+
+            # Remove default (global) commands so they don't show in groups
+            requests.post(f"{base_url}/deleteMyCommands", json={
+                "scope": {"type": "default"}
+            }, timeout=10)
+
+            print("✅ Bot commands configured: visible in private chats only")
+        except Exception as e:
+            print(f"❌ Error setting up commands: {e}")
+
     def run(self) -> None:
         """Main bot loop"""
         print("🤖 Kyiv Tusovyi Bot started! (Production version)")
@@ -332,6 +369,9 @@ class KyivTusovyiBot:
         if not self.test_bot_connection():
             print("❌ Bot startup failed - invalid token!")
             return
+
+        # Configure command menu visibility
+        self.setup_commands()
 
         while self.running:
             try:
