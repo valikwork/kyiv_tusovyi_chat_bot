@@ -90,6 +90,15 @@ class KyivTusovyiBot:
         time_since_last_post = time.time() - self.user_last_post[user_id]
         return time_since_last_post < (RATE_LIMIT_MINUTES * 60)
 
+    def get_rate_limit_remaining(self, user_id: str) -> str:
+        """Get formatted remaining rate limit time, or empty string if not limited"""
+        if user_id == self.admin_user_id or not self.is_rate_limited(user_id):
+            return ""
+        remaining_time = RATE_LIMIT_MINUTES * 60 - (time.time() - self.user_last_post[user_id])
+        minutes_left = int(remaining_time // 60)
+        seconds_left = int(remaining_time % 60)
+        return f"{minutes_left}m {seconds_left}s"
+
     def is_user_blocked(self, user_id: str) -> bool:
         """Check if user is blocked"""
         return user_id in self.blocked_users
@@ -129,12 +138,9 @@ class KyivTusovyiBot:
                         return
 
                     # Check rate limiting (skip for admin)
-                    if user_id != self.admin_user_id and self.is_rate_limited(user_id):
-                        remaining_time = RATE_LIMIT_MINUTES * 60 - (time.time() - self.user_last_post[user_id])
-                        minutes_left = int(remaining_time // 60)
-                        seconds_left = int(remaining_time % 60)
-                        self.send_message(chat_id,
-                                          f"⏰ Please wait {minutes_left}m {seconds_left}s before posting again.")
+                    remaining = self.get_rate_limit_remaining(user_id)
+                    if remaining:
+                        self.send_message(chat_id, f"⏰ Please wait {remaining} before posting again.")
                         return
 
                     print(f"📝 Posting message from {display_name}: {text}")
@@ -245,11 +251,9 @@ class KyivTusovyiBot:
                     return
 
                 # Check rate limiting (skip for admin)
-                if user_id != self.admin_user_id and self.is_rate_limited(user_id):
-                    remaining_time = RATE_LIMIT_MINUTES * 60 - (time.time() - self.user_last_post[user_id])
-                    minutes_left = int(remaining_time // 60)
-                    seconds_left = int(remaining_time % 60)
-                    self.send_message(chat_id, f"⏰ You can post again in {minutes_left}m {seconds_left}s.")
+                remaining = self.get_rate_limit_remaining(user_id)
+                if remaining:
+                    self.send_message(chat_id, f"⏰ You can post again in {remaining}.")
                     return
 
                 # Put user in waiting mode
@@ -269,12 +273,7 @@ class KyivTusovyiBot:
                 blocked_status = "Yes" if self.is_user_blocked(user_id) else "No"
 
                 # Calculate time until next post
-                next_post_info = "Now"
-                if user_id != self.admin_user_id and self.is_rate_limited(user_id):
-                    remaining_time = RATE_LIMIT_MINUTES * 60 - (time.time() - self.user_last_post[user_id])
-                    minutes_left = int(remaining_time // 60)
-                    seconds_left = int(remaining_time % 60)
-                    next_post_info = f"{minutes_left}m {seconds_left}s"
+                next_post_info = self.get_rate_limit_remaining(user_id) or "Now"
 
                 status_text = f"""
 📊 *Your Status*
