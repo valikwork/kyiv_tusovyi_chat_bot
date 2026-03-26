@@ -60,6 +60,10 @@ class KyivTusovyiBot:
 
     def post_to_target_chat(self, text: str, user_name: str, user_id: str) -> bool:
         """Post a message to the target chat without user attribution"""
+        # Try with Markdown first for formatting support
+        if self.send_message(self.target_chat_id, text, parse_mode='Markdown'):
+            return True
+        # If Markdown fails (invalid syntax), retry as plain text
         return self.send_message(self.target_chat_id, text, parse_mode=None)
 
     def get_updates(self) -> dict:
