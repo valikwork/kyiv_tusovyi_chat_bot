@@ -66,6 +66,69 @@ class KyivTusovyiBot:
         # If Markdown fails (invalid syntax), retry as plain text
         return self.send_message(self.target_chat_id, text, parse_mode=None)
 
+    def forward_media_to_target(self, message: dict) -> bool:
+        """Forward a media message (photo, video, document, etc.) to the target chat"""
+        base_url = f"https://api.telegram.org/bot{self.token}"
+        caption = message.get('caption', '')
+
+        try:
+            if 'photo' in message:
+                # Photos come as array of sizes, pick the largest
+                file_id = message['photo'][-1]['file_id']
+                data = {'chat_id': self.target_chat_id, 'photo': file_id}
+                if caption:
+                    data['caption'] = caption
+                response = requests.post(f"{base_url}/sendPhoto", data=data, timeout=10)
+            elif 'video' in message:
+                file_id = message['video']['file_id']
+                data = {'chat_id': self.target_chat_id, 'video': file_id}
+                if caption:
+                    data['caption'] = caption
+                response = requests.post(f"{base_url}/sendVideo", data=data, timeout=10)
+            elif 'document' in message:
+                file_id = message['document']['file_id']
+                data = {'chat_id': self.target_chat_id, 'document': file_id}
+                if caption:
+                    data['caption'] = caption
+                response = requests.post(f"{base_url}/sendDocument", data=data, timeout=10)
+            elif 'voice' in message:
+                file_id = message['voice']['file_id']
+                data = {'chat_id': self.target_chat_id, 'voice': file_id}
+                response = requests.post(f"{base_url}/sendVoice", data=data, timeout=10)
+            elif 'video_note' in message:
+                file_id = message['video_note']['file_id']
+                data = {'chat_id': self.target_chat_id, 'video_note': file_id}
+                response = requests.post(f"{base_url}/sendVideoNote", data=data, timeout=10)
+            elif 'sticker' in message:
+                file_id = message['sticker']['file_id']
+                data = {'chat_id': self.target_chat_id, 'sticker': file_id}
+                response = requests.post(f"{base_url}/sendSticker", data=data, timeout=10)
+            elif 'animation' in message:
+                file_id = message['animation']['file_id']
+                data = {'chat_id': self.target_chat_id, 'animation': file_id}
+                if caption:
+                    data['caption'] = caption
+                response = requests.post(f"{base_url}/sendAnimation", data=data, timeout=10)
+            elif 'audio' in message:
+                file_id = message['audio']['file_id']
+                data = {'chat_id': self.target_chat_id, 'audio': file_id}
+                if caption:
+                    data['caption'] = caption
+                response = requests.post(f"{base_url}/sendAudio", data=data, timeout=10)
+            else:
+                return False
+
+            result = response.json()
+            if result.get('ok'):
+                print(f"✅ Media sent to chat {self.target_chat_id}")
+                return True
+            else:
+                print(f"❌ Error sending media: {result.get('description', 'Unknown error')}")
+                return False
+        except requests.exceptions.RequestException as e:
+            print(f"❌ Network error sending media: {e}")
+            return False
+
     def get_updates(self) -> dict:
         """Get updates from Telegram"""
         url = f"https://api.telegram.org/bot{self.token}/getUpdates"
@@ -129,28 +192,39 @@ class KyivTusovyiBot:
 
             # Check if user is waiting to post their next message
             if user_id in self.waiting_for_post:
-                # This is the message they want to post
-                if text:
+                # Check rate limiting (skip for admin)
+                remaining = self.get_rate_limit_remaining(user_id)
+                if remaining:
+                    self.send_message(chat_id, f"⏰ Please wait {remaining} before posting again.")
+                    del self.waiting_for_post[user_id]
+                    return
+
+                # Check if message contains media
+                has_media = any(key in message for key in (
+                    'photo', 'video', 'document', 'voice', 'video_note',
+                    'sticker', 'animation', 'audio'
+                ))
+
+                if has_media:
+                    print(f"📎 Posting media from {display_name}")
+                    if self.forward_media_to_target(message):
+                        self.send_message(chat_id, "✅ Media posted successfully!")
+                        self.user_last_post[user_id] = time.time()
+                        print(f"✅ Media posted by {display_name} (ID: {user_id})")
+                    else:
+                        self.send_message(chat_id, "❌ Failed to post media. Please try again later.")
+                elif text:
                     # Check message length
                     if len(text) > MAX_MESSAGE_LENGTH:
                         self.send_message(chat_id,
                                           f"❌ Message too long! Maximum {MAX_MESSAGE_LENGTH} characters allowed.")
                         return
 
-                    # Check rate limiting (skip for admin)
-                    remaining = self.get_rate_limit_remaining(user_id)
-                    if remaining:
-                        self.send_message(chat_id, f"⏰ Please wait {remaining} before posting again.")
-                        return
-
                     print(f"📝 Posting message from {display_name}: {text}")
 
                     if self.post_to_target_chat(text, display_name, user_id):
                         self.send_message(chat_id, "✅ Message posted successfully!")
-                        # Update last post time
                         self.user_last_post[user_id] = time.time()
-
-                        # Log to console
                         print(f"✅ Message posted by {display_name} (ID: {user_id})")
                     else:
                         self.send_message(chat_id, "❌ Failed to post message. Please try again later.")
@@ -219,7 +293,7 @@ class KyivTusovyiBot:
 
 *How to post:*
 1. Send `/post`
-2. Send your message (it will be posted anonymously)
+2. Send your message, photo, video, or file (it will be posted anonymously)
 3. Bot will post it to the group
 
 *Rules:*
@@ -259,7 +333,7 @@ class KyivTusovyiBot:
                 # Put user in waiting mode
                 self.waiting_for_post[user_id] = True
                 self.send_message(chat_id,
-                                  f"📝 Ready to post! Send me your next message and I'll post it to the group anonymously.\n\nSend `/cancel` to cancel.\n\nMax length: {MAX_MESSAGE_LENGTH} characters.")
+                                  f"📝 Ready to post! Send me a message, photo, video, or file and I'll post it to the group anonymously.\n\nSend `/cancel` to cancel.\n\nMax text length: {MAX_MESSAGE_LENGTH} characters.")
 
             elif text == '/cancel':
                 if user_id in self.waiting_for_post:
