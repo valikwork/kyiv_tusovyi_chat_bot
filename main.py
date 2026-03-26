@@ -36,8 +36,9 @@ class KyivTusovyiBot:
         data = {
             'chat_id': chat_id,
             'text': text,
-            'parse_mode': parse_mode
         }
+        if parse_mode:
+            data['parse_mode'] = parse_mode
 
         try:
             response = requests.post(url, data=data, timeout=10)
@@ -59,7 +60,7 @@ class KyivTusovyiBot:
 
     def post_to_target_chat(self, text: str, user_name: str, user_id: str) -> bool:
         """Post a message to the target chat without user attribution"""
-        return self.send_message(self.target_chat_id, text)
+        return self.send_message(self.target_chat_id, text, parse_mode=None)
 
     def get_updates(self) -> dict:
         """Get updates from Telegram"""
@@ -231,7 +232,7 @@ class KyivTusovyiBot:
                     help_text += """
 *Admin Commands:*
 • `/block <user_id>` - Block a user
-• `/unblock <user_id>` - Unblock a user
+• `/unblock <user_id>` - Unblock a user  
 • `/blocked` - List blocked users
                     """
 
